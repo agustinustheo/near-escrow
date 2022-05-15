@@ -1,29 +1,44 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::{env, log, metadata, near_bindgen, AccountId};
+use near_sdk::{env, log, metadata, near_bindgen, Balance, Promise};
 
 use std::collections::HashMap;
 
+use rand::{thread_rng, Rng};
+use rand::distributions::{Alphanumeric};
+
 metadata! {
-#[near_bindgen]
-#[derive(Default, BorshDeserialize, BorshSerialize)]
-pub struct StatusMessage {
-    records: HashMap<AccountId, String>,
-}
-
-#[near_bindgen]
-impl StatusMessage {
-    #[payable]
-    pub fn set_status(&mut self, message: String) {
-        let account_id = env::signer_account_id();
-        log!("{} set_status with message {}", account_id, message);
-        self.records.insert(account_id, message);
+    #[near_bindgen]
+    #[derive(Default, BorshDeserialize, BorshSerialize)]
+    pub struct Escrow {
+        balances: HashMap<String, Balance>,
     }
 
-    pub fn get_status(&self, account_id: AccountId) -> Option::<String> {
-        log!("get_status for account_id {}", account_id);
-        self.records.get(&account_id).cloned()
+    #[near_bindgen]
+    impl Escrow {
+        #[payable]
+        pub fn submit_escrow(&mut self) -> String {
+            let random_string: String = thread_rng()
+                .sample_iter(&Alphanumeric)
+                .take(24)
+                .map(char::from)
+                .collect();
+
+            self.balances.insert(random_string.clone(), env::attached_deposit());
+            random_string
+        }
+
+        pub fn retrieve_escrow(&mut self, key: String) -> Option::<Promise> {
+            if !self.balances.contains_key(&key) {
+                return None;
+            }
+
+            let pr = Promise::new(env::signer_account_id())
+                .transfer(*self.balances.get(&key).unwrap());
+            self.balances.remove(&key);
+                        
+            Some(pr)
+        }
     }
-}
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -31,8 +46,9 @@ impl StatusMessage {
 mod tests {
     use super::*;
     use near_sdk::MockedBlockchain;
-    use near_sdk::test_utils::{get_logs, VMContextBuilder};
     use near_sdk::{testing_env, VMContext};
+    use near_sdk::test_utils::{get_logs, VMContextBuilder};
+
     use std::convert::TryInto;
 
     fn get_context(is_view: bool) -> VMContext {
@@ -43,24 +59,14 @@ mod tests {
     }
 
     #[test]
-    fn set_get_message() {
+    fn retrieve_empty_escrow() {
         let context = get_context(false);
         testing_env!(context);
-        let mut contract = StatusMessage::default();
-        contract.set_status("hello".to_string());
-        assert_eq!(get_logs(), vec!["bob_near set_status with message hello"]);
-        let context = get_context(true);
-        testing_env!(context);
-        assert_eq!("hello".to_string(), contract.get_status("bob_near".parse().unwrap()).unwrap());
-        assert_eq!(get_logs(), vec!["get_status for account_id bob_near"])
-    }
 
-    #[test]
-    fn get_nonexistent_message() {
-        let context = get_context(true);
-        testing_env!(context);
-        let contract = StatusMessage::default();
-        assert_eq!(None, contract.get_status("francis.near".parse().unwrap()));
-        assert_eq!(get_logs(), vec!["get_status for account_id francis.near"])
+        let mut contract = Escrow::default();
+        match contract.retrieve_escrow("test".to_string()) {
+            None => {},
+            _ => panic!(),
+        };
     }
 }
