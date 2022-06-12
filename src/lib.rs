@@ -1,5 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::{env, log, metadata, near_bindgen, AccountId, Balance, Promise};
+use near_sdk::{env, metadata, near_bindgen, Balance, Promise};
 
 use std::collections::HashMap;
 
@@ -18,7 +18,7 @@ metadata! {
         #[payable]
         pub fn submit_escrow(&mut self) -> String {
             if near_sdk::env::attached_deposit() == 0 {
-                near_sdk::env::panic(b"Deposit must be more than zero");
+                near_sdk::env::panic_str("Deposit must be more than zero");
             }
 
             let random_string: String = thread_rng()
@@ -49,7 +49,8 @@ metadata! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::test_utils::test_env::{alice, bob};
+    use near_sdk::AccountId;
+    use near_sdk::test_utils::test_env::alice;
     use near_sdk::test_utils::VMContextBuilder;
     use near_sdk::testing_env;
 
@@ -77,17 +78,28 @@ mod tests {
         set_predecessor_and_deposit(alice(), 20);
 
         let mut contract = Escrow::default();
-        let c = contract.submit_escrow();
+        let _c = contract.submit_escrow();
     }
 
     #[test]
-    fn retrieve_empty_escrow_2() {
+    #[should_panic]
+    fn submit_escrow_cannot_be_zero() {
+        set_predecessor_and_deposit(alice(), 0);
+
+        let mut contract = Escrow::default();
+        let _c = contract.submit_escrow();
+    }
+
+    #[test]
+    fn retrieve_escrow() {
         set_predecessor_and_deposit(alice(), 20);
 
         let mut contract = Escrow::default();
-        match contract.retrieve_escrow("test".to_string()) {
-            None => {},
-            _ => panic!(),
+        let c = contract.submit_escrow();
+
+        match contract.retrieve_escrow(c) {
+            None => panic!(),
+            _ => {},
         };
     }
 }
