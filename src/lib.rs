@@ -1,5 +1,5 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::{env, log, metadata, near_bindgen, Balance, Promise};
+use near_sdk::{env, log, metadata, near_bindgen, AccountId, Balance, Promise};
 
 use std::collections::HashMap;
 
@@ -17,6 +17,10 @@ metadata! {
     impl Escrow {
         #[payable]
         pub fn submit_escrow(&mut self) -> String {
+            if near_sdk::env::attached_deposit() == 0 {
+                near_sdk::env::panic(b"Deposit must be more than zero");
+            }
+
             let random_string: String = thread_rng()
                 .sample_iter(&Alphanumeric)
                 .take(24)
@@ -45,23 +49,40 @@ metadata! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::MockedBlockchain;
-    use near_sdk::{testing_env, VMContext};
-    use near_sdk::test_utils::{get_logs, VMContextBuilder};
+    use near_sdk::test_utils::test_env::{alice, bob};
+    use near_sdk::test_utils::VMContextBuilder;
+    use near_sdk::testing_env;
 
-    use std::convert::TryInto;
-
-    fn get_context(is_view: bool) -> VMContext {
-        VMContextBuilder::new()
-            .signer_account_id("bob_near".try_into().unwrap())
-            .is_view(is_view)
-            .build()
+    fn set_predecessor_and_deposit(predecessor: AccountId, deposit: Balance) {
+        testing_env!(VMContextBuilder::new()
+            .predecessor_account_id(predecessor)
+            .attached_deposit(deposit)
+            .build())
     }
+
 
     #[test]
     fn retrieve_empty_escrow() {
-        let context = get_context(false);
-        testing_env!(context);
+        set_predecessor_and_deposit(alice(), 20);
+
+        let mut contract = Escrow::default();
+        match contract.retrieve_escrow("test".to_string()) {
+            None => {},
+            _ => panic!(),
+        };
+    }
+
+    #[test]
+    fn submit_escrow() {
+        set_predecessor_and_deposit(alice(), 20);
+
+        let mut contract = Escrow::default();
+        let c = contract.submit_escrow();
+    }
+
+    #[test]
+    fn retrieve_empty_escrow_2() {
+        set_predecessor_and_deposit(alice(), 20);
 
         let mut contract = Escrow::default();
         match contract.retrieve_escrow("test".to_string()) {
